@@ -4,11 +4,17 @@
 ## Import the necessary functions from the admin module. 
 # Replace "function_name1" with the actual function names you want to import.
 
+from pathlib import Path
+
 from admin import (
-    function_name1,
-    function_name2,
-    function_name3
+    load_library,
+    save_library,
+    find_book,
 )
+
+
+## File used to persist the library data.
+DATA_FILE = Path(__file__).with_name("library.json")
 
 
 
@@ -18,7 +24,29 @@ def books_in_category(
     books,
     category
 ):
-    pass
+
+    if not isinstance(category, str):
+        return []
+
+    wanted_category = category.strip().lower()
+
+    if not wanted_category:
+        return []
+
+    matching_books = []
+
+    for book_id, book in books.items():
+
+        book_category = (
+            str(book.get("category", ""))
+            .strip()
+            .lower()
+        )
+
+        if book_category == wanted_category:
+            matching_books.append(book_id)
+
+    return matching_books
 
     
 
@@ -29,7 +57,30 @@ def search_by_title(
     books,
     search_text
 ):
-    pass
+
+    if not isinstance(search_text, str):
+        return []
+
+    wanted_title = search_text.strip().lower()
+
+    if not wanted_title:
+        return []
+
+    matching_books = []
+
+    for book_id, book in books.items():
+
+        title = (
+            str(book.get("title", ""))
+            .strip()
+            .lower()
+        )
+
+        if wanted_title in title:
+            matching_books.append(book_id)
+
+    return matching_books
+
     
 
 
@@ -45,7 +96,28 @@ def borrow_book(
     search_text,
     borrower
 ):
-    pass
+
+    book_id = find_book(books, search_text)
+
+    if book_id is None:
+        return "BOOK_NOT_FOUND"
+
+    if not isinstance(borrower, str) or not borrower.strip():
+        return "EMPTY_NAME"
+
+    if not books[book_id].get("available"):
+        return "NOT_AVAILABLE"
+
+    books[book_id]["available"] = False
+
+    loans.append(
+        {
+            "book_id": book_id,
+            "borrower": borrower.strip()
+        }
+    )
+
+    return "OK"
 
     
 
@@ -63,9 +135,56 @@ def return_book(
     book_title,
     borrower
 ):
-    pass
+
+    book_id = find_book(books, book_title)
+
+    if book_id is None:
+        return "BOOK_NOT_FOUND"
+
+    if not isinstance(borrower, str) or not borrower.strip():
+        return "EMPTY_NAME"
+
+    for index, loan in enumerate(loans):
+
+        if loan.get("book_id") == book_id:
+
+            del loans[index]
+
+            books[book_id]["available"] = True
+
+            return "OK"
+
+    return "NOT_ON_LOAN"
 
     
+
+
+## Helper used by the menu: print a list of matching book IDs.
+def _display_search_results(
+    books,
+    book_ids
+):
+
+    if not book_ids:
+        print("No books found.")
+        return
+
+    for book_id in book_ids:
+
+        book = books.get(book_id, {})
+
+        availability = (
+            "AVAILABLE"
+            if book.get("available")
+            else "ON LOAN"
+        )
+
+        print(
+            f"{book_id} | "
+            f"{book.get('title', '')} | "
+            f"{book.get('category', '')} | "
+            f"{availability}"
+        )
 
 
 
@@ -76,5 +195,128 @@ def return_book(
 ## The program continues to display the menu until the user chooses to exit, at which point the library data is saved back to the JSON file.
 ## The main function should also handle invalid selections by displaying an error message and prompting the user to select again.
 def main():
-    pass
 
+    data = load_library(DATA_FILE)
+
+    books = data.get("books", {})
+    loans = data.get("loans", [])
+
+    result_messages = {
+        "OK": "Action completed successfully.",
+        "BOOK_NOT_FOUND": "Book not found.",
+        "EMPTY_NAME": "The name cannot be empty.",
+        "NOT_AVAILABLE": "Sorry, that book is currently ON LOAN.",
+        "NOT_ON_LOAN": "That book is not currently on loan."
+    }
+
+    try:
+
+        while True:
+
+            print()
+            print("LIBRARY USER SYSTEM")
+            print("=" * 60)
+            print("1. Search books by title")
+            print("2. Search books by category")
+            print("3. Borrow a book")
+            print("4. Return a book")
+            print("5. Exit")
+
+            choice = input(
+                "Please select an option (1-5): "
+            ).strip()
+
+            if choice == "1":
+
+                search_text = input(
+                    "Enter the title or a keyword: "
+                )
+
+                matching_books = search_by_title(
+                    books,
+                    search_text
+                )
+
+                _display_search_results(
+                    books,
+                    matching_books
+                )
+
+            elif choice == "2":
+
+                category = input(
+                    "Enter the category: "
+                )
+
+                matching_books = books_in_category(
+                    books,
+                    category
+                )
+
+                _display_search_results(
+                    books,
+                    matching_books
+                )
+
+            elif choice == "3":
+
+                search_text = input(
+                    "Enter the book ID, title, or author: "
+                )
+
+                borrower = input(
+                    "Enter the borrower's name: "
+                )
+
+                result = borrow_book(
+                    books,
+                    loans,
+                    search_text,
+                    borrower
+                )
+
+                print(result_messages[result])
+
+            elif choice == "4":
+
+                book_title = input(
+                    "Enter the book ID, title, or author: "
+                )
+
+                borrower = input(
+                    "Enter the borrower's name: "
+                )
+
+                result = return_book(
+                    books,
+                    loans,
+                    book_title,
+                    borrower
+                )
+
+                print(result_messages[result])
+
+            elif choice == "5":
+
+                print("Exiting LIBRARY USER SYSTEM. Goodbye!")
+                break
+
+            else:
+
+                print(
+                    "Invalid selection. Please enter a "
+                    "number between 1 and 5."
+                )
+
+    except EOFError:
+        # No more input is available; close the program safely.
+        print("Input closed. Exiting LIBRARY USER SYSTEM.")
+
+    data["books"] = books
+    data["loans"] = loans
+
+    save_library(data, DATA_FILE)
+
+
+if __name__ == "__main__":
+    main()
